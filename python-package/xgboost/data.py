@@ -517,10 +517,16 @@ def _is_uri(data):
 
 def _from_uri(data, missing, feature_names, feature_types):
     _warn_unused_missing(data, missing)
+    # NOTE: 数据抓手
     handle = ctypes.c_void_p()
+    # NOTE: 数据路径
     data = os.fspath(os.path.expanduser(data))
+    # NOTE: 调用C API的XGDMatrixCreateFromFile
+    #    |: 1. 通过抓手指针来ref数据结构
+    #    |: 2. 字符串类型为c_char_p
     _check_call(_LIB.XGDMatrixCreateFromFile(c_str(data),
                                              ctypes.c_int(1),
+                                             # NOTE: 通过引用传递参数
                                              ctypes.byref(handle)))
     return handle, feature_names, feature_types
 
@@ -585,6 +591,7 @@ def dispatch_data_backend(data, missing, threads,
         return _from_numpy_array(data, missing, threads, feature_names,
                                  feature_types)
     if _is_uri(data):
+        # NOTE: 提供uri的文件
         return _from_uri(data, missing, feature_names, feature_types)
     if _is_list(data):
         return _from_list(data, missing, threads, feature_names, feature_types)

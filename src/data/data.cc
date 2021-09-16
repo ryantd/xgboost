@@ -669,12 +669,17 @@ DMatrix* DMatrix::Load(const std::string& uri,
                        const std::string& file_format) {
   std::string fname, cache_file;
   size_t dlm_pos = uri.find('#');
+  // NOTE: 如../data/agaricus.txt.train#dtrain.cache
   if (dlm_pos != std::string::npos) {
+    // NOTE: 该种情况只适用于外部存储器
+    //    |: #后的文件会cache于外存上
+    //    |: 分布式下即为partition
     cache_file = uri.substr(dlm_pos + 1, uri.length());
     fname = uri.substr(0, dlm_pos);
     CHECK_EQ(cache_file.find('#'), std::string::npos)
         << "Only one `#` is allowed in file path for cache file specification.";
     if (load_row_split) {
+      // NOTE: 外部存储器的分布式逻辑
       std::ostringstream os;
       std::vector<std::string> cache_shards = common::Split(cache_file, ':');
       for (size_t i = 0; i < cache_shards.size(); ++i) {
@@ -700,6 +705,7 @@ DMatrix* DMatrix::Load(const std::string& uri,
   }
   int partid = 0, npart = 1;
   if (load_row_split) {
+    // NOTE: 分布式逻辑
     partid = rabit::GetRank();
     npart = rabit::GetWorldSize();
   } else {
@@ -714,6 +720,7 @@ DMatrix* DMatrix::Load(const std::string& uri,
 
   // legacy handling of binary data loading
   if (file_format == "auto" && npart == 1) {
+    // NOTE: file_format=auto时, 直接load二进制文件
     DMatrix *loaded = TryLoadBinary(fname, silent);
     if (loaded) {
       return loaded;
@@ -722,16 +729,23 @@ DMatrix* DMatrix::Load(const std::string& uri,
 
   DMatrix* dmat {nullptr};
   try {
+    // NOTE: cache_file为空, 即为不cache
     if (cache_file.empty()) {
+      // NOTE: unique_ptr智能指针, 独享parser
+      //    |: 该parser为文件解析器, partid及npart主要为处理分布式文件设计
       std::unique_ptr<dmlc::Parser<uint32_t>> parser(
           dmlc::Parser<uint32_t>::Create(fname.c_str(), partid, npart,
                                          file_format.c_str()));
+      // NOTE: FileAdapter对parser进行了包装
       data::FileAdapter adapter(parser.get());
+      // NOTE: 产出DMatrix
       dmat = DMatrix::Create(&adapter, std::numeric_limits<float>::quiet_NaN(),
                              1, cache_file);
     } else {
+      // NOTE: 外存大多数例子都是通过如下的iter进行实践, 有待研究
       data::FileIterator iter{fname, uint32_t(partid), uint32_t(npart),
                               file_format};
+      // NOTE: 外存版DMatrix
       dmat = new data::SparsePageDMatrix{
           &iter,
           iter.Proxy(),

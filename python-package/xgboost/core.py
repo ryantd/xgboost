@@ -598,11 +598,13 @@ class DMatrix:  # pylint: disable=too-many-instance-attributes
 
         from .data import dispatch_data_backend, _is_iter
 
+        # NOTE: 判断是否是DataIter
         if _is_iter(data):
             self._init_from_iter(data, enable_categorical)
             assert self.handle is not None
             return
 
+        # NOTE: 否, 则通过检查数据的backend来获得参数
         handle, feature_names, feature_types = dispatch_data_backend(
             data,
             missing=self.missing,
@@ -614,6 +616,7 @@ class DMatrix:  # pylint: disable=too-many-instance-attributes
         assert handle is not None
         self.handle = handle
 
+        # NOTE: 回填meta信息
         self.set_info(
             label=label,
             weight=weight,
@@ -896,7 +899,9 @@ class DMatrix:  # pylint: disable=too-many-instance-attributes
         number of rows : int
         """
         ret = c_bst_ulong()
+        # NOTE: 模型抓手
         _check_call(_LIB.XGDMatrixNumRow(self.handle,
+                                         # NOTE: 返回值抓手指针
                                          ctypes.byref(ret)))
         return ret.value
 
@@ -1288,25 +1293,32 @@ class Booster(object):
             if not isinstance(d, DMatrix):
                 raise TypeError('invalid cache item: {}'.format(type(d).__name__), cache)
 
+        # NOTE: 遍历全部缓存数据, 取得数据抓手, 组成一个C格式的数组
         dmats = c_array(ctypes.c_void_p, [d.handle for d in cache])
+        # NOTE: booster模型的抓手
         self.handle = ctypes.c_void_p()
         _check_call(_LIB.XGBoosterCreate(dmats, c_bst_ulong(len(cache)),
                                          ctypes.byref(self.handle)))
         for d in cache:
             # Validate feature only after the feature names are saved into booster.
+            # NOTE: 通过C API校验数据信息
             self._validate_features(d)
 
+        # NOTE: 如果存在基座booster
         if isinstance(model_file, Booster):
             assert self.handle is not None
             # We use the pickle interface for getting memory snapshot from
             # another model, and load the snapshot with this booster.
+            # NOTE: 获取基座booster的快照, 尤其是模型抓手
             state = model_file.__getstate__()
             handle = state['handle']
             del state['handle']
             ptr = (ctypes.c_char * len(handle)).from_buffer(handle)
             length = c_bst_ulong(len(handle))
+            # NOTE: 抓手内容替换
             _check_call(
                 _LIB.XGBoosterUnserializeFromBuffer(self.handle, ptr, length))
+            # NOTE: 更新实例参数
             self.__dict__.update(state)
         elif isinstance(model_file, (STRING_TYPES, os.PathLike, bytearray)):
             self.load_model(model_file)
@@ -1330,6 +1342,7 @@ class Booster(object):
             self.booster = 'gbtree'
 
     def _configure_metrics(self, params: Union[Dict, List]) -> Union[Dict, List]:
+        # NOTE: 只为了eval_metric
         if isinstance(params, dict) and 'eval_metric' in params \
            and isinstance(params['eval_metric'], list):
             params = dict((k, v) for k, v in params.items())
@@ -1337,6 +1350,7 @@ class Booster(object):
             params.pop("eval_metric", None)
             params = list(params.items())
             for eval_metric in eval_metrics:
+                # NOTE: 如果指定多个eval_metric, 则转换tuple list形式
                 params += [('eval_metric', eval_metric)]
         return params
 
@@ -1378,6 +1392,7 @@ class Booster(object):
             ) from e
 
     def _configure_constraints(self, params: Union[Dict, List]) -> Union[Dict, List]:
+        # NOTE: 转换限制
         if isinstance(params, dict):
             value = params.get("monotone_constraints")
             if value:
@@ -1411,10 +1426,12 @@ class Booster(object):
 
     def __getstate__(self):
         # can't pickle ctypes pointers, put model content in bytearray
+        # NOTE: booster的dict快照, 预备克隆
         this = self.__dict__.copy()
         handle = this['handle']
         if handle is not None:
             length = c_bst_ulong()
+            # NOTE: 克隆后的booster的新模型抓手
             cptr = ctypes.POINTER(ctypes.c_char)()
             _check_call(_LIB.XGBoosterSerializeToBuffer(self.handle,
                                                         ctypes.byref(length),
@@ -1568,6 +1585,7 @@ class Booster(object):
                 if not isinstance(value, STRING_TYPES):
                     raise ValueError("Set Attr only accepts string values")
                 value = c_str(str(value))
+            # NOTE: 通过C API给booster设置属性
             _check_call(_LIB.XGBoosterSetAttr(
                 self.handle, c_str(key), value))
 
@@ -1577,6 +1595,7 @@ class Booster(object):
         if not hasattr(self, "handle") or self.handle is None:
             return None
         _check_call(
+            # NOTE: 通过C API获取特征信息
             _LIB.XGBoosterGetStrFeatureInfo(
                 self.handle, c_str(field), ctypes.byref(length), ctypes.byref(sarr),
             )
@@ -1598,9 +1617,11 @@ class Booster(object):
         assignment.
 
         """
+        # NOTE: 通过C API查feature_name
         return self._get_feature_info("feature_name")
 
     def _set_feature_info(self, features: Optional[List[str]], field: str) -> None:
+        # NOTE: 通过C API设置feature_names
         if features is not None:
             assert isinstance(features, list)
             c_feature_info = [bytes(f, encoding="utf-8") for f in features]
@@ -1619,6 +1640,7 @@ class Booster(object):
 
     @feature_names.setter
     def feature_names(self, features: Optional[List[str]]) -> None:
+        # NOTE: 通过C API设置feature_names
         self._set_feature_info(features, "feature_name")
 
     @feature_types.setter
@@ -1641,6 +1663,7 @@ class Booster(object):
             params = [(params, value)]
         for key, val in params:
             if val is not None:
+                # NOTE: 依次设置param
                 _check_call(_LIB.XGBoosterSetParam(self.handle, c_str(key),
                                                    c_str(str(val))))
 
@@ -2433,11 +2456,17 @@ class Booster(object):
         Validate Booster and data's feature_names are identical.
         Set feature_names and feature_types from DMatrix
         """
+        # NOTE: 通过C API查行数
         if data.num_row() == 0:
             return
 
+        # NOTE: 通过C API查模型feature_names
         if self.feature_names is None:
+            # NOTE: 设置模型feature_names
+            #    |: 1. 通过C API查DMatrix的feature_names
+            #    |: 2. 通过C API设模型feature_names
             self.feature_names = data.feature_names
+            # NOTE: 同上
             self.feature_types = data.feature_types
         if data.feature_names is None and self.feature_names is not None:
             raise ValueError(
@@ -2445,6 +2474,7 @@ class Booster(object):
                 ", ".join(self.feature_names)
             )
         # Booster can't accept data with different feature names
+        # NOTE: feature_names检查
         if self.feature_names != data.feature_names:
             dat_missing = set(self.feature_names) - set(data.feature_names)
             my_missing = set(data.feature_names) - set(self.feature_names)

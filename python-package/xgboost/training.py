@@ -47,10 +47,12 @@ def _train_internal(params, dtrain,
     """internal training function"""
     callbacks = [] if callbacks is None else copy.copy(callbacks)
     evals = list(evals)
-
+    
+    # NOTE: 实例化模型
     bst = Booster(params, [dtrain] + [d[0] for d in evals])
 
     if xgb_model is not None:
+        # NOTE: 同上
         bst = Booster(params, [dtrain] + [d[0] for d in evals],
                       model_file=xgb_model)
 
@@ -185,6 +187,7 @@ def train(params, dtrain, num_boost_round=10, evals=(), obj=None, feval=None,
     -------
     Booster : a trained booster model
     """
+    # NOTE: 实际的训练入口
     bst = _train_internal(params, dtrain,
                           num_boost_round=num_boost_round,
                           evals=evals,

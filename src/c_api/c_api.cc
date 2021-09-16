@@ -133,9 +133,11 @@ XGB_DLL int XGBGetGlobalConfig(const char** json_str) {
   API_END();
 }
 
+// NOTE: 本地文件读取数据
 XGB_DLL int XGDMatrixCreateFromFile(const char *fname,
                                     int silent,
                                     DMatrixHandle *out) {
+  // NOTE: API_BEGIN会引入XGBoostAPIGuard
   API_BEGIN();
   bool load_row_split = false;
   if (rabit::IsDistributed()) {
@@ -143,6 +145,7 @@ XGB_DLL int XGDMatrixCreateFromFile(const char *fname,
                  << "will split data among workers";
     load_row_split = true;
   }
+  // NOTE: 返回DMatrix指针
   *out = new std::shared_ptr<DMatrix>(DMatrix::Load(fname, silent != 0, load_row_split));
   API_END();
 }
@@ -452,11 +455,13 @@ XGB_DLL int XGDMatrixSetStrFeatureInfo(DMatrixHandle handle, const char *field,
   API_END();
 }
 
+// NOTE: 查询给定的特征信息
 XGB_DLL int XGDMatrixGetStrFeatureInfo(DMatrixHandle handle, const char *field,
                                        xgboost::bst_ulong *len,
                                        const char ***out_features) {
   API_BEGIN();
   CHECK_HANDLE();
+  // NOTE: 思路同XGBoosterGetStrFeatureInfo
   auto m = *static_cast<std::shared_ptr<DMatrix>*>(handle);
   auto &info = static_cast<std::shared_ptr<DMatrix> *>(handle)->get()->Info();
 
@@ -518,6 +523,7 @@ XGB_DLL int XGDMatrixGetUIntInfo(const DMatrixHandle handle,
   API_END();
 }
 
+// NOTE: 获取行数
 XGB_DLL int XGDMatrixNumRow(const DMatrixHandle handle,
                             xgboost::bst_ulong *out) {
   API_BEGIN();
@@ -537,14 +543,20 @@ XGB_DLL int XGDMatrixNumCol(const DMatrixHandle handle,
 }
 
 // xgboost implementation
+// NOTE: dmats为DMatrix的抓手数组
 XGB_DLL int XGBoosterCreate(const DMatrixHandle dmats[],
+                            // NOTE: 数组数据个数
                             xgboost::bst_ulong len,
+                            // NOTE: Booster抓手
                             BoosterHandle *out) {
   API_BEGIN();
   std::vector<std::shared_ptr<DMatrix> > mats;
   for (xgboost::bst_ulong i = 0; i < len; ++i) {
+    // NOTE: 从抓手指针载入实际数据
     mats.push_back(*static_cast<std::shared_ptr<DMatrix>*>(dmats[i]));
   }
+  // NOTE: 一路到LearnerConfiguration进行mats的处理
+  //    |: 持有mats的为LearnerAPIThreadLocalStore or ThreadLocalPredictionCache?
   *out = Learner::Create(mats);
   API_END();
 }
@@ -556,6 +568,7 @@ XGB_DLL int XGBoosterFree(BoosterHandle handle) {
   API_END();
 }
 
+// NOTE: 依次设置param
 XGB_DLL int XGBoosterSetParam(BoosterHandle handle,
                               const char *name,
                               const char *value) {
@@ -902,28 +915,34 @@ XGB_DLL int XGBoosterGetModelRaw(BoosterHandle handle,
 
 // The following two functions are `Load` and `Save` for memory based
 // serialization methods. E.g. Python pickle.
+// NOTE: 序列化模型
 XGB_DLL int XGBoosterSerializeToBuffer(BoosterHandle handle,
                                        xgboost::bst_ulong *out_len,
                                        const char **out_dptr) {
   API_BEGIN();
   CHECK_HANDLE();
+  // NOTE: 载入模型
   auto *learner = static_cast<Learner*>(handle);
+  // NOTE: 获得全部局部变量的字符串指针
   std::string &raw_str = learner->GetThreadLocal().ret_str;
   raw_str.resize(0);
   common::MemoryBufferStream fo(&raw_str);
   learner->Configure();
+  // NOTE: 克隆
   learner->Save(&fo);
   *out_dptr = dmlc::BeginPtr(raw_str);
   *out_len = static_cast<xgboost::bst_ulong>(raw_str.length());
   API_END();
 }
 
+// NOTE: 反序列化模型
 XGB_DLL int XGBoosterUnserializeFromBuffer(BoosterHandle handle,
                                            const void *buf,
                                            xgboost::bst_ulong len) {
   API_BEGIN();
   CHECK_HANDLE();
   common::MemoryFixSizeBuffer fs((void*)buf, len);  // NOLINT(*)
+  // NOTE: 从buffer中载入
   static_cast<Learner*>(handle)->Load(&fs);
   API_END();
 }
@@ -1060,6 +1079,7 @@ XGB_DLL int XGBoosterGetAttr(BoosterHandle handle,
   API_END();
 }
 
+// NOTE: 插值
 XGB_DLL int XGBoosterSetAttr(BoosterHandle handle,
                              const char* key,
                              const char* value) {
@@ -1113,15 +1133,19 @@ XGB_DLL int XGBoosterSetStrFeatureInfo(BoosterHandle handle, const char *field,
   API_END();
 }
 
+// NOTE: 查询给定的特征信息
 XGB_DLL int XGBoosterGetStrFeatureInfo(BoosterHandle handle, const char *field,
                                        xgboost::bst_ulong *len,
                                        const char ***out_features) {
   API_BEGIN();
   CHECK_HANDLE();
   auto const *learner = static_cast<Learner const *>(handle);
+  // NOTE: 结果抓手
   std::vector<const char *> &charp_vecs =
       learner->GetThreadLocal().ret_vec_charp;
+  // NOTE: 结果字符串
   std::vector<std::string> &str_vecs = learner->GetThreadLocal().ret_vec_str;
+  // NOTE: 设值
   if (!std::strcmp(field, "feature_name")) {
     learner->GetFeatureNames(&str_vecs);
   } else if (!std::strcmp(field, "feature_type")) {

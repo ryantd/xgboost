@@ -275,8 +275,10 @@ class LearnerConfiguration : public Learner {
   explicit LearnerConfiguration(std::vector<std::shared_ptr<DMatrix> > cache)
       : need_configuration_{true} {
     monitor_.Init("Learner");
+    // NOTE: ThreadLocal的作用是提供线程内的局部变量, 这种变量在线程的生命周期内起作用
     auto& local_cache = (*ThreadLocalPredictionCache::Get())[this];
     for (std::shared_ptr<DMatrix> const& d : cache) {
+      // TODO: 在哪cache
       local_cache.Cache(d, GenericParameter::kCpuId);
     }
   }

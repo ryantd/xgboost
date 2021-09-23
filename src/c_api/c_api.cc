@@ -619,6 +619,7 @@ XGB_DLL int XGBoosterSaveJsonConfig(BoosterHandle handle,
   API_END();
 }
 
+// NOTE: 开始一轮迭代
 XGB_DLL int XGBoosterUpdateOneIter(BoosterHandle handle,
                                    int iter,
                                    DMatrixHandle dtrain) {

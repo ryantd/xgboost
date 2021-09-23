@@ -1328,6 +1328,7 @@ class Booster(object):
             raise TypeError('Unknown type:', model_file)
 
         params = params or {}
+        # NOTE: 处理eval_metric
         params = self._configure_metrics(params.copy())
         params = self._configure_constraints(params)
         if isinstance(params, list):
@@ -1342,7 +1343,6 @@ class Booster(object):
             self.booster = 'gbtree'
 
     def _configure_metrics(self, params: Union[Dict, List]) -> Union[Dict, List]:
-        # NOTE: 只为了eval_metric
         if isinstance(params, dict) and 'eval_metric' in params \
            and isinstance(params['eval_metric'], list):
             params = dict((k, v) for k, v in params.items())
@@ -1684,9 +1684,12 @@ class Booster(object):
         if not isinstance(dtrain, DMatrix):
             raise TypeError('invalid training matrix: {}'.format(
                 type(dtrain).__name__))
+        # NOTE: 校验feature相关信息
+        #    |: 如果没有基座模型, 这里是第一次校验
         self._validate_features(dtrain)
 
         if fobj is None:
+            # NOTE: 不调用boost的一次迭代
             _check_call(_LIB.XGBoosterUpdateOneIter(self.handle,
                                                     ctypes.c_int(iteration),
                                                     dtrain.handle))

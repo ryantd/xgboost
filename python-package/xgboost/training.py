@@ -68,6 +68,7 @@ def _train_internal(params, dtrain,
         if early_stopping_rounds:
             callbacks.append(callback.EarlyStopping(
                 rounds=early_stopping_rounds, maximize=maximize))
+        # NOTE: 使用CallbackContainer来包装各种TrainingCallback
         callbacks = callback.CallbackContainer(callbacks, metric=feval)
     else:
         callbacks = _configure_deprecated_callbacks(
@@ -75,11 +76,17 @@ def _train_internal(params, dtrain,
             num_boost_round, feval, evals_result, callbacks,
             show_stdv=False, cvfolds=None)
 
+    # NOTE: 训练前的钩子, 其中
+    #    |: 1. CallbackContainer会依次调用各个子callback的before_training
+    #    |: 2. TrainingCallback默认含有before_training及after_training
+    #    |: 3. before_training及after_training必须返回model
     bst = callbacks.before_training(bst)
 
     for i in range(start_iteration, num_boost_round):
+        # NOTE: 迭代前的钩子, 判断是否暂停, 默认返回false
         if callbacks.before_iteration(bst, i, dtrain, evals):
             break
+        # NOTE: 训练迭代
         bst.update(dtrain, i, obj)
         if callbacks.after_iteration(bst, i, dtrain, evals):
             break

@@ -1061,12 +1061,15 @@ class LearnerImpl : public LearnerIO {
   }
 
   void UpdateOneIter(int iter, std::shared_ptr<DMatrix> train) override {
+    // NOTE: 观测系统开启
     monitor_.Start("UpdateOneIter");
     TrainingObserver::Instance().Update(iter);
     this->Configure();
+    // NOTE: 随机种子
     if (generic_parameters_.seed_per_iteration || rabit::IsDistributed()) {
       common::GlobalRandom().seed(generic_parameters_.seed * kRandSeedMagic + iter);
     }
+    // NOTE: 分布式数据检查
     this->CheckDataSplitMode();
     this->ValidateDMatrix(train.get(), true);
 
@@ -1243,6 +1246,7 @@ class LearnerImpl : public LearnerIO {
     gbm_->PredictBatch(data, out_preds, training, layer_begin, layer_end);
   }
 
+  // NOTE: 校验DMatrix
   void ValidateDMatrix(DMatrix* p_fmat, bool is_training) const {
     MetaInfo const& info = p_fmat->Info();
     info.Validate(generic_parameters_.gpu_id);
